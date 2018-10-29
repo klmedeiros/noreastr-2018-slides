@@ -1,0 +1,260 @@
+modularizing your shiny code: a tale of much debugging
+
+---
+
+second subtitle: how i came to fix everything i broke in the first place
+
+because that's coding, isn't it?
+
+---
+
+who am i?
+
+I'm Kaelen Medeiros. I work as a Content Quality Analyst at DataCamp -
+Richie, who introduced me, is the Head of Content Quality and my boss, so
+thank you for the kind intro, Richie.
+
+I live in NYC, and have lived in Chicago, New Orleans, and hail from Michigan
+originally.
+
+I have a MS in Biostats from LSUHSC and a BA in film & women's studies from
+Umich.
+
+I've been some form of data scientist or statistician for 4 years,
+focusing mostly on quality & experimental design.
+
+I'm the proud human to one beautiful cat, Scully. I'm definitely the Mulder of
+our family, and I possess two opposable thumbs, which makes me valuable in the
+eyes of my child.
+
+---
+
+What's a Shiny Module, Anyway?
+
+So for those not familiar with Shiny modules - they're a smaller piece of a
+Shiny app that can't actually be run as an app itself. A module gets called
+inside your `app.R` file, which will contain your actual app code - the UI &
+server. You'll use the `callModule()` function to grab a module's code, which
+can include input, output, or both.
+
+Modules can be nested, reused, put into R packages for sharing, and can be
+simple or complicated - that's all up to you!
+
+I highly recommend reading the RStudio Shiny Documentation on modularizing
+your Shiny code, which is where I learned most of what's in this presentation.
+
+---
+
+When Should I be Modularizing My Shiny Code?
+
+If (and really when, for more complicated Shiny apps) your `app.R` file gets
+cluttered or long, you should definitely consider modularizing your code.
+
+If you're putting many different pieces, some disparate, into the same app,
+that's another good reason to modularize your code. I'll show an example of
+this in a moment using DataCamp's content dashboard.
+
+There's also the last reason, which was definitely a motivator for me -
+modularizing this particular code was a personal challenge for the 4th quarter
+goals at work. It was my October dashboard project, which I'm proud to say
+I achieved 2 weeks early (luckily, because I needed time to fix everything
+I broke by modularizing!)
+
+---
+
+Overview of DataCamp's Content dashboard
+
+I'll now show the DataCamp Content Dasbhoard, and more specifically the
+Content Quality dashboard, which I "own," a.k.a. am completely responsible for.
+The other parts that I'll show are "owned" by other people.
+
+I inherited a version of this dashboard from Dave Robinson when I started at
+DataCamp in June of 2018. I'd like to take a second here to thank not only him,
+but also Mine Rudicenko (sp!), Lucy D'Agostino McGowan, Dean Attali, and
+Elaine McVey, all authors of the DataCamp courses in the Shiny Fundamentals
+with R track. I didn't know much Shiny at all when I joined the team - I'd
+taken only Mine's course -- and these four courses are _how_ I learned
+enough Shiny to fake it till I made it with this dashboard.
+
+---
+
+Example of Shiny Code that Needs modularizing
+
+So now that you've seen the dashboard, let's talk about why this code
+desperately needed to be modularized.
+
+Before taking the Content Quality code out of the `app.R` file (I was the last
+owner to create a module), the file was 908 lines of code. No thanks.
+
+---
+
+After Modularizing...
+
+After I moved the CQ code out into its module, the `app.R` file was a far
+more manageble 140 lines of code.
+
+The 900 lines still exist in the `module.R` file, but I'll talk at the end of
+this presentation how to deal with that.
+
+---
+
+Okay, so **How** Do I modularize my Shiny Code
+
+Take all of your code necessary for the app and stick in a new `.R` file. If
+only it were that simple!
+
+The new module file needs a UI and server function of its own. You'll also
+need to create a namespace function and then wrap all of the ids contained
+in the module in `ns()`.
+
+Back in `app.R`, use `callModule()` to call the module you've created.
+
+Perhaps you can get this on the first try, and if so, good for you. I'm
+honestly impressed. I was not one of those people, so let's dig a little
+deeper into these steps.
+
+---
+
+Module UI Function(s)
+
+The nice thing about your module is you're not limited to only 1 UI function.
+Ours actually as two, one for all the main output (sidebars, etc.) and one that
+specifically does the time period select.
+
+Your UI function should, like the example here, be some meaningful name
+suffixed with `input`, `output`, or `ui`. I used `ui` to follow convention
+on other modules that had already been created in this app.
+
+You need to create the namespace function here in the UI with the code I left
+in the example - `ns()` is now available for your use throughout the app, which
+is critical!
+
+---
+
+Module Server function
+
+You should also create a namespace in your server function - you can see
+the beginning of mine here, where I've created the `"content_quality"`
+namespace necessary for any `input`s and `output`s that exist in the server.
+
+---
+
+callModule()
+
+When you use the `callModule()` function in the `app.R` file itself, you'll
+need to be sure you pass in the module name, the namespace name,
+any datasets needed for your module to work correctly, and any reactive
+functions or objects also needed for it to work correctly.
+
+You can see here I've passed in two datasets and a reactive object, `is_admin`.
+For some reason I have chosen to name one input and not the other, which
+is not great coding practice, but I agreed to show this to y'all warts and all.
+
+---
+
+Debugging Your Shiny Module
+
+Great - so now we know what a module is, though that was a 1000-foot Overview.
+Now comes the fun part - debugging, or, as noted in my intro, "fixing all the
+things you broke yourself in the first place."
+
+---
+
+You haven't used ns() enough
+
+You think you have, but you haven't. You've missed something.
+
+The biggest mistake I made trying to set up this module was not using `ns()`
+enough. Namely, I initially didn't realize that inputs and outputs in my
+module's server function needed to also have their ids wrapped in `ns()`.
+
+I highly recommend searching your module's `.R` file for the specific text
+on the slide - `Input(`, `Output(`, any `radioButtons()`, and any other
+inputs and outputs specific to your app that you know you used. This Should
+likely be one of the first things you do.
+
+---
+
+Reactive objects vs. Reactive functions
+
+As mentioned earlier, your call to `callModule()` should include any Reactive
+functions or objects necessary for the module to work in the app.
+
+When I was intially trying to set this up, I kept using `is_admin` inside
+of a call to `reactive()` in `callModule()` -- which is perfectly valid,
+if `is_admin` were a reactive *function*. Instead, based on the Code
+on this slide, `is_admin` is a reactive object, and should just be passed in
+with its name.
+
+This is a crucial difference.
+
+---
+
+observe(print(reactiveValuesToList(input)))
+
+While we were debugging, we picked up a hot tip from StackOverflow,
+which was to use this function call to print out all of the inputs actually
+going from the module into the app. This was incredibly helpful when paired
+with a specific print statement letting us know where this code was located,
+so we could debug how much of the module was actually working.
+
+We found quite a few `id` errors this way - we'd named things
+`content_quality_tabs`, when actually the `ns()` function pre-appends the
+`content_quality` portion of the name, so we figured out we needed to simply
+name the `id` `tabs.` Very helpful, and was something we discovered by moving
+this code and the corresponding print statements around in the app.
+
+---
+
+Ask for Help
+
+And my final big piece of debugging advice that will fit into 15 minutes is
+to ask for help. I am personally incredibly blessed to work with Dave
+Robinson, as mentioned, who helped me do all of this debugging, has helped
+me fix everything we broke, and even looked over these slides for me.
+
+I highly recommend Stack overflow's Shiny tag, the Rstudio community, or
+twitter as places to ask for help. In my experience, the R community has been
+nothing but welcoming and helpful.
+
+---
+
+General Tips into Do yourself a favor...
+
+My last general tip, which sort of applies to R, Shiny, and really your life
+is to add code headings in your app.
+
+I did this after modularizing, and it's made a world of difference - a true
+game changer. I can now navigate the 900+ lines of module code with ease,
+partly because I know the code well, but mostly because I added headings that
+allow me to click through to the parts I need very quickly.
+
+---
+
+How To Create Code Headings:
+
+I inherited this as a legacy piece of the code when it was handed to me
+upon starting at DataCamp, but I noticed that if I added these "Code Heading"
+separators into my code, it created a dropdown menu in the bottom of my
+RStudio script, which allows me to click through my Shiny code in the module
+much quicker.
+
+---
+
+Me after debugging this dashboard
+
+speaks for itself, honestly.
+
+---
+
+Questions + my non-expert answers
+
+---
+
+Find Me after Today
+
+Here's where you can find me on the internet after today. I'll put these slides
+on Github after my talk, likely this evening, because that's just who I am
+as a person.
+
+Thank you!

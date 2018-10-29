@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Modularizing your Shiny Code</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Kaelen L. Medeiros" />
+    <meta name="date" content="2018-10-26" />
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link href="libs/remark-css/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Modularizing your Shiny Code
+## a tale of much debugging
+### Kaelen L. Medeiros
+### 2018-10-26
+
+---
+
+
+
+
+background-image: url("https://media.giphy.com/media/n0GIZfzgHvUOc/giphy.gif")
+background-position: 50% 50%
+class: center, inverse
+
+# second subtitle: how I came to fix everything I broke in the first place
+
+---
+# Who am I?
+
+&lt;img src="images/dc_selfie.png" align="left" height="200" width="150" hspace="35" /&gt;
+
+- Content Quality Analyst @ [DataCamp](https://www.datacamp.com)
+- Lives in NYC (formerly Chicago, New Orleans, and Michigan)
+- MS in Biostatistics from Louisiana State University
+- BA in Film &amp; Women's Studies from University of Michigan
+- Data Scientist/Statistician for 4 years
+- Proud human to one beautiful cat, Scully
+
+&lt;img src="images/scully.png" align="right" hspace="35" /&gt;
+---
+class: inverse, center, middle
+
+# Shiny Modules
+
+---
+
+# What's a Shiny Module, Anyway?
+
+- A smaller piece of a Shiny app that *cannot* be directly run as a Shiny app itself
+- Can include input, output, or both
+- Can be nested, reused, put into R packages
+- Simple or complicated - up to you!
+- More details can be found in the [RStudio Shiny Documentation on Modules](https://shiny.rstudio.com/articles/modules.html).
+
+---
+
+# When Should I Be Modularizing My Shiny Code?
+
+- When your `app.R` file gets cluttered and/or long
+- If you're putting many different pieces (some disparate) into the same app
+- As a personal challenge for Q4 at work to see if you can
+
+---
+
+# Overview of DataCamp's Content Dashboard
+
+Show what you know: [DataCamp's Content Dashboard](http://dashboards.datacamp.com/content/)
+&lt;br&gt;\* the login for this will not work for anyone who isn't an `admin` (works at DataCamp) or has an external login (an instructor)
+
+- Inherited when I began on the Content Quality team in June 2018
+- Side note: I learned Shiny by taking DataCamp courses on the [Shiny Fundamentals with R Track](https://www.datacamp.com/tracks/shiny-fundamentals-with-r)
+- Main app built by [Dave Robinson](https://twitter.com/drob)
+- Other parts of app *not* related to CQ are maintainted by other employees @ DataCamp
+
+---
+
+# Example of Shiny Code That Needs Modularizing
+
+&lt;img src="images/pre_mod_db_code.png" align="top" /&gt;
+
+Before I modularized the DataCamp Content team Shiny dashboard, our `app.R` file was 908 lines of code.
+
+---
+
+# After Modularizing...
+
+&lt;img src="images/post_mod_db_code.png" align="top" /&gt;
+
+However, after moving the CQ related info out into a module, the `app.R` file is only 140 lines of code - and far more manageable! * 
+
+\* however, that 900 lines of code still exists in the module file - more on how to deal with that at the end of this talk!
+
+---
+
+# Okay, So **How** Do I Modularize my Shiny Code?
+
+- Take all of the code necessary for your part of the app and stick it in a new `.R` file
+- New file needs a UI and a Server of its own!
+- Be sure to namespace appropriately with `ns()` (more on this in a few slides)
+- `callModule()` back in your main `app.R` file
+
+---
+
+# Module UI Function(s)
+
+- UI function should be a meaningful name suffixed with `Input`, `Output`, or `UI`
+- Beginning of main UI function in `content_quality_module.R`:
+
+```
+content_quality_ui &lt;- function(id) {
+
+  ns &lt;- NS(id) 
+
+  # then the rest of your UI code - tabSetPanel(), ...
+}
+```
+
+- Needs to start with `ns &lt;- NS(id)` in order to create a namespace function
+- You aren't limited to only 1 UI function - my module has 2!
+
+---
+
+# Module Server Function
+
+- Also need to create a namespace in your server:
+
+```
+content_quality &lt;- function(input, output, session, 
+                            content_quality_data,
+                            asana_content_development_data,
+                            is_admin) {
+  
+  # create namespace -------------------------------------
+  ns &lt;- NS("content_quality")
+
+  # then the rest of the server code - much reactives + data
+
+```
+
+- Will then contain the rest of your usual server things: Output, tabs, filters, data, graphs, whatever your heart desires
+
+---
+
+# callModule()
+
+- Input:
+  - module name
+  - module namespace name
+  - any datasets needed to work correctly
+  - any reactive functions/objects needed to run (more on this soon)
+  
+- Call this inside of the server function in your `app.R` file:
+```
+callModule(content_quality, # name
+           "content_quality", # namespace/id name
+           content_quality_data = content_quality_data, # data
+           asana_content_development_data, # data
+           is_admin # reactive object
+           )
+```
+
+- and maybe don't be like me and have named data + unnamed - ????
+
+---
+
+class: inverse, center, middle
+
+# Debugging Your Shiny Module
+ 
+---
+
+# You haven't used ns() enough
+
+You're probably convinced you've wrapped enough of your `input`s and `output`s in an `ns()` function, so as to properly namespace them so they'll render in your app...
+
+**You probably haven't.**
+
+My biggest mistake? Not `ns()`-ing in my server function for the `input`s and `output`s present there, like this `dataTableOutput()` id that I missed:
+
+```
+output$admin &lt;- renderUI({
+  if (!is_admin()) {
+    return(NULL)
+  }
+  
+  box(title = "Logins", 
+      dataTableOutput(ns("instructor_logins")),
+      width = NULL)
+})
+```
+
+Search your module for `Input(`, `Output(`, and any `radioButtons()`, plus any other `input`s and `output`s you may have used in your specific app.
+
+---
+
+# Reactive objects vs. Reactive functions
+
+One major mistake I struggled with was when passing `is_admin` to my `call_module()` function:
+
+```
+callModule(content_quality, 
+           "content_quality", 
+           content_quality_data = content_quality_data, 
+           asana_content_development_data, 
+           is_admin)
+```
+
+I continually tried to pass `is_admin` inside of a call to `reactive()`, as if it were a reactive *function*. 
+
+However, `is_admin` is actually a reactive *object* in our code:
+
+```
+is_admin &lt;- reactive({
+  # is null, for local testing
+  is.null(session$user) || session$user == "admin"
+})
+  ```
+  
+Be sure you're clear on the difference!
+
+---
+
+# observe(print(reactiveValuesToList(input)))
+
+This was a tip we picked up from [Stack Overflow](https://stackoverflow.com/questions/48431845/how-to-get-list-of-all-output-elements-in-r-shiny) that, when combined with specific `print()` statements to let us know where we'd placed the code, would output all of the `input`s, allowing us to see what was being passed successfully to the app.
+
+```
+callModule(content_quality, 
+          "content_quality", 
+          content_quality_data = content_quality_data, 
+          asana_content_development_data, 
+          is_admin)
+ 
+# then some more modules
+
+print("after the call modules")
+observe(print((reactiveValuesToList(input))))
+}
+```
+
+We moved this code progressively through the module &amp; `app.R` files with appropriate print statements to match.
+
+---
+
+# Ask for Help
+
+- Seriously though, ask for help.
+- I am lucky enough to work with [Dave Robinson](https://twitter.com/drob), who assisted me in modularizing and debugging this app, for which I am incredibly grateful 
+- Highly recommend [Stack Overflow Shiny tag](https://stackoverflow.com/questions/tagged/shiny), [RStudio Community](https://community.rstudio.com/), and Twitter as resources for assistance
+
+&lt;img src="images/so_shiny.png" align="bottom" /&gt;
+
+---
+
+class: inverse, center, middle
+
+# General Tips
+
+---
+
+# Do Yourself a Favor and Add Code Headings
+&lt;img src="images/code_headings.png" align="left" hspace="20" /&gt;
+
+This is a general Shiny/R/life tip, but **do** add code headings to your module and/or Shiny app. I added them after modularizing and it actually changed my life. 
+
+---
+
+# How To Create Code Headings
+
+In my code, this looks like:
+
+```
+# Server -------------------------------------------------
+content_quality &lt;- function(input, output, session, 
+                            content_quality_data,
+                            asana_content_development_data,
+                            is_admin) {
+  
+  # create namespace -------------------------------------
+  ns &lt;- NS("content_quality")
+
+  # Admin interface  -------------------------------------
+
+    #more code here...
+```
+
+Then each comment + any functions defined in that section become a click-through menu at the bottom of my RStudio script which allows me to find different pieces of my module code much quicker.
+
+---
+
+background-image: url("https://media.giphy.com/media/12tRlBD5znA796/giphy.gif")
+background-position: 50% 50%
+class: center, inverse
+
+# Me after debugging this dashboard
+
+---
+
+class: inverse, center, middle
+
+# Questions + my non-expert answers
+
+---
+class: inverse, center, middle
+
+# Find Me After Today
+
+&lt;svg style="height:0.8em;top:.04em;position:relative;fill:steelblue;" viewBox="0 0 512 512"&gt;&lt;path d="M476 3.2L12.5 270.6c-18.1 10.4-15.8 35.6 2.2 43.2L121 358.4l287.3-253.2c5.5-4.9 13.3 2.6 8.6 8.3L176 407v80.5c0 23.6 28.5 32.9 42.5 15.8L282 426l124.6 52.2c14.2 6 30.4-2.9 33-18.2l72-432C515 7.8 493.3-6.8 476 3.2z"/&gt;&lt;/svg&gt;&lt;a href="mailto:kaelen@datacamp.com"&gt;&lt;/i&gt;&amp;nbsp; kaelen@datacamp.com&lt;/a&gt;&lt;br&gt;
+&lt;svg style="height:0.8em;top:.04em;position:relative;fill:steelblue;" viewBox="0 0 512 512"&gt;&lt;path d="M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z"/&gt;&lt;/svg&gt;&lt;a href="http://klmedeiros.com"&gt;&lt;/i&gt;&amp;nbsp; klmedeiros.com&lt;/a&gt;&lt;br&gt;
+&lt;svg style="height:0.8em;top:.04em;position:relative;fill:steelblue;" viewBox="0 0 512 512"&gt;&lt;path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/&gt;&lt;/svg&gt;&lt;a href="http://twitter.com/kaelen_medeiros"&gt;&lt;/i&gt;&amp;nbsp; @kaelen_medeiros&lt;/a&gt;&lt;br&gt;
+&lt;svg style="height:0.8em;top:.04em;position:relative;fill:steelblue;" viewBox="0 0 496 512"&gt;&lt;path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/&gt;&lt;/svg&gt;&lt;a href="http://github.com/klmedeiros"&gt;&lt;/i&gt;&amp;nbsp; @klmedeiros&lt;/a&gt;&lt;br&gt;
+&lt;svg style="height:0.8em;top:.04em;position:relative;fill:steelblue;" viewBox="0 0 384 512"&gt;&lt;path d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z"/&gt;&lt;/svg&gt;&lt;a href="http://datacamp.com"&gt;&lt;/i&gt;&amp;nbsp; Content Quality Analyst @ DataCamp&lt;/a&gt;
+    </textarea>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function() {
+  var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})();</script>
+
+<script>
+(function() {
+  var i, text, code, codes = document.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+})();
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
